@@ -1,0 +1,44 @@
+Transform: 'AWS::Serverless-2016-10-31'
+Resources:
+  SigningKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Signing key
+      GenerateSecretString:
+        PasswordLength: 4096
+
+  SigningKeyRotationSchedule:
+    Type: AWS::SecretsManager::RotationSchedule
+    Properties:
+      RotationLambdaARN: !GetAtt SigningKeyRotationLambda.Arn
+      RotationRules:
+        AutomaticallyAfterDays: 1
+      SecretId: !Ref SigningKey
+
+  SigningKeyRotationLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs12.x
+      Handler: app.lambdaHandler
+      CodeUri: ./src
+      Policies:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:DescribeSecret
+                - secretsmanager:GetSecretValue
+                - secretsmanager:PutSecretValue
+                - secretsmanager:UpdateSecretVersionStage
+              Resource: !Ref SigningKey
+            - Effect: Allow
+              Action: secretsmanager:GetRandomPassword
+              Resource: '*'
+
+  SigningKeyRotationLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt SigningKeyRotationLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: secretsmanager.amazonaws.com
